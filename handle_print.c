@@ -1,100 +1,73 @@
 #include "main.h"
 
-unsigned int convert_c(va_list args, buffer_t *output,
-		unsigned char flags, int wid, int prec, unsigned char len);
-unsigned int convert_percent(va_list args, buffer_t *output,
-		unsigned char flags, int wid, int prec, unsigned char len);
-unsigned int convert_p(va_list args, buffer_t *output,
-		unsigned char flags, int wid, int prec, unsigned char len);
+unsigned int _memcpy(buffer_t *output, const char *src, unsigned int n);
+void free_buffer(buffer_t *output);
+buffer_t *init_buffer(void);
 
 /**
- * convert_c - Converts an argument to an unsigned char and
- *             stores it to a buffer contained in a struct.
- * @args: A va_list pointing to the argument to be converted.
- * @flags: Flag modifiers.
- * @wid: A width modifier.
- * @prec: A precision modifier.
- * @len: A length modifier.
- * @output: A buffer_t struct containing a character array.
+ * _memcpy - Copies n bytes from memory area src to
+ *           the buffer contained in a buffer_t struct.
+ * @output: A buffer_t struct.
+ * @src: A pointer to the memory area to copy.
+ * @n: The number of bytes to be copied.
  *
- * Return: The number of bytes stored to the buffer.
+ * Return: The number of bytes copied.
  */
-unsigned int convert_c(va_list args, buffer_t *output,
-		unsigned char flags, int wid, int prec, unsigned char len)
+unsigned int _memcpy(buffer_t *output, const char *src, unsigned int n)
 {
-	char c;
-	unsigned int ret = 0;
+	unsigned int index;
 
-	(void)prec;
-	(void)len;
+	for (index = 0; index < n; index++)
+	{
+		*(output->buffer) = *(src + index);
+		(output->len)++;
 
-	c = va_arg(args, int);
+		if (output->len == 1024)
+		{
+			write(1, output->start, output->len);
+			output->buffer = output->start;
+			output->len = 0;
+		}
 
-	ret += print_width(output, ret, flags, wid);
-	ret += _memcpy(output, &c, 1);
-	ret += print_neg_width(output, ret, flags, wid);
+		else
+			(output->buffer)++;
+	}
 
-	return (ret);
+	return (n);
 }
 
 /**
- * convert_percent - Stores a percent sign to a
- *                   buffer contained in a struct.
- * @args: A va_list pointing to the argument to be converted.
- * @flags: Flag modifiers.
- * @wid: A width modifier.
- * @prec: A precision modifier.
- * @len: A length modifier.
- * @output: A buffer_t struct containing a character array.
- *
- * Return: The number of bytes stored to the buffer (always 1).
+ * free_buffer - Frees a buffer_t struct.
+ * @output: The buffer_t struct to be freed.
  */
-unsigned int convert_percent(va_list args, buffer_t *output,
-		unsigned char flags, int wid, int prec, unsigned char len)
+void free_buffer(buffer_t *output)
 {
-	char percent = '%';
-	unsigned int ret = 0;
-
-	(void)args;
-	(void)prec;
-	(void)len;
-
-	ret += print_width(output, ret, flags, wid);
-	ret += _memcpy(output, &percent, 1);
-	ret += print_neg_width(output, ret, flags, wid);
-
-	return (ret);
+	free(output->start);
+	free(output);
 }
 
 /**
- * convert_p - Converts the address of an argument to hex and
- *             stores it to a buffer contained in a struct.
- * @args: A va_list pointing to the argument to be converted.
- * @flags: Flag modifiers.
- * @wid: A width modifier.
- * @prec: A precision modifier.
- * @len: A length modifier.
- * @output: A buffer_t struct containing a character array.
+ * init_buffer - Initializes a variable of struct type buffer_t.
  *
- * Return: The number of bytes stored to the buffer.
+ * Return: A pointer to the initialized buffer_t.
  */
-unsigned int convert_p(va_list args, buffer_t *output,
-		unsigned char flags, int wid, int prec, unsigned char len)
+buffer_t *init_buffer(void)
 {
-	char *null = "(nil)";
-	unsigned long int address;
-	unsigned int ret = 0;
+	buffer_t *output;
 
-	(void)len;
+	output = malloc(sizeof(buffer_t));
+	if (output == NULL)
+		return (NULL);
 
-	address = va_arg(args, unsigned long int);
-	if (address == '\0')
-		return (_memcpy(output, null, 5));
+	output->buffer = malloc(sizeof(char) * 1024);
+	if (output->buffer == NULL)
+	{
+		free(output);
+		return (NULL);
+	}
 
-	flags |= 32;
-	ret += convert_ubase(output, address, "0123456789abcdef",
-			flags, wid, prec);
-	ret += print_neg_width(output, ret, flags, wid);
+	output->start = output->buffer;
+	output->len = 0;
 
-	return (ret);
+	return (output);
 }
