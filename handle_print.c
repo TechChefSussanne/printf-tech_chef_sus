@@ -1,197 +1,103 @@
 #include "main.h"
 
-unsigned char handle_flags(const char *flag, char *index);
-unsigned char handle_length(const char *modifier, char *index);
-int handle_width(va_list args, const char *modifier, char *index);
-int handle_precision(va_list args, const char *modifier, char *index);
-unsigned int (*handle_specifiers(const char *specifier))(va_list, buffer_t *,
-		unsigned char, int, int, unsigned char);
+unsigned int convert_sbase(buffer_t *output, long int num, char *base,
+		unsigned char flags, int wid, int prec);
+unsigned int convert_ubase(buffer_t *output,
+		unsigned long int num, char *base,
+		unsigned char flags, int wid, int prec);
 
 /**
- * handle_flags - Matches flags with corresponding values.
- * @flag: A pointer to a potential string of flags.
- * @index: An index counter for the original format string.
+ * convert_sbase - Converts a signed long to an inputted base and stores
+ *                 the result to a buffer contained in a struct.
+ * @output: A buffer_t struct containing a character array.
+ * @num: A signed long to be converted.
+ * @base: A pointer to a string containing the base to convert to.
+ * @flags: Flag modifiers.
+ * @wid: A width modifier.
+ * @prec: A precision modifier.
  *
- * Return: If flag characters are matched - a corresponding value.
- *         Otherwise - 0.
+ * Return: The number of bytes stored to the buffer.
  */
-unsigned char handle_flags(const char *flag, char *index)
+unsigned int convert_sbase(buffer_t *output, long int num, char *base,
+		unsigned char flags, int wid, int prec)
 {
-	int i, j;
-	unsigned char ret = 0;
-	flag_t flags[] = {
-		{'+', PLUS},
-		{' ', SPACE},
-		{'#', HASH},
-		{'0', ZERO},
-		{'-', NEG},
-		{0, 0}
-	};
+	int size;
+	char digit, pad = '0';
+	unsigned int ret = 1;
 
-	for (i = 0; flag[i]; i++)
+	for (size = 0; *(base + size);)
+		size++;
+
+	if (num >= size || num <= -size)
+		ret += convert_sbase(output, num / size, base,
+				flags, wid - 1, prec - 1);
+
+	else
 	{
-		for (j = 0; flags[j].flag != 0; j++)
+		for (; prec > 1; prec--, wid--) /* Handle precision */
+			ret += _memcpy(output, &pad, 1);
+
+		if (NEG_FLAG == 0) /* Handle width */
 		{
-			if (flag[i] == flags[j].flag)
-			{
-				(*index)++;
-				if (ret == 0)
-					ret = flags[j].value;
-				else
-					ret |= flags[j].value;
-				break;
-			}
+			pad = (ZERO_FLAG == 1) ? '0' : ' ';
+			for (; wid > 1; wid--)
+				ret += _memcpy(output, &pad, 1);
 		}
-		if (flags[j].value == 0)
-			break;
 	}
+
+	digit = base[(num < 0 ? -1 : 1) * (num % size)];
+	_memcpy(output, &digit, 1);
 
 	return (ret);
 }
 
 /**
- * handle_length - Matches length modifiers with their corresponding value.
- * @modifier: A pointer to a potential length modifier.
- * @index: An index counter for the original format string.
+ * convert_ubase - Converts an unsigned long to an inputted base and
+ *                 stores the result to a buffer contained in a struct.
+ * @output: A buffer_t struct containing a character array.
+ * @num: An unsigned long to be converted.
+ * @base: A pointer to a string containing the base to convert to.
+ * @flags: Flag modifiers.
+ * @wid: A width modifier.
+ * @prec: A precision modifier.
  *
- * Return: If a lenth modifier is matched - its corresponding value.
- *         Otherwise - 0.
+ * Return: The number of bytes stored to the buffer.
  */
-unsigned char handle_length(const char *modifier, char *index)
+unsigned int convert_ubase(buffer_t *output, unsigned long int num, char *base,
+		unsigned char flags, int wid, int prec)
 {
-	if (*modifier == 'h')
+	unsigned int size, ret = 1;
+	char digit, pad = '0', *lead = "0x";
+
+	for (size = 0; *(base + size);)
+		size++;
+
+	if (num >= size)
+		ret += convert_ubase(output, num / size, base,
+				flags, wid - 1, prec - 1);
+
+	else
 	{
-		(*index)++;
-		return (SHORT);
-	}
-
-	else if (*modifier == 'l')
-	{
-		(*index)++;
-		return (LONG);
-	}
-
-	return (0);
-}
-
-/**
- * handle_width - Matches a width modifier with its corresponding value.
- * @args: A va_list of arguments.
- * @modifier: A pointer to a potential width modifier.
- * @index: An index counter for the original format string.
- *
- * Return: If a width modifier is matched - its value.
- *         Otherwise - 0.
- */
-int handle_width(va_list args, const char *modifier, char *index)
-{
-	int value = 0;
-
-	while ((*modifier >= '0' && *modifier <= '9') || (*modifier == '*'))
-	{
-		(*index)++;
-
-		if (*modifier == '*')
+		if (((flags >> 5) & 1) == 1) /* Printing a ptr address */
 		{
-			value = va_arg(args, int);
-			if (value <= 0)
-				return (0);
-			return (value);
+			wid -= 2;
+			prec -= 2;
 		}
+		for (; prec > 1; prec--, wid--) /* Handle precision */
+			ret += _memcpy(output, &pad, 1);
 
-		value *= 10;
-		value += (*modifier - '0');
-		modifier++;
-	}
-
-	return (value);
-}
-
-/**
- * handle_precision - Matches a precision modifier with
- *                    its corresponding value.
- * @args: A va_list of arguments.
- * @modifier: A pointer to a potential precision modifier.
- * @index: An index counter for the original format string.
- *
- * Return: If a precision modifier is matched - its value.
- *         If the precision modifier is empty, zero, or negative - 0.
- *         Otherwise - -1.
- */
-int handle_precision(va_list args, const char *modifier, char *index)
-{
-	int value = 0;
-
-	if (*modifier != '.')
-		return (-1);
-
-	modifier++;
-	(*index)++;
-
-	if ((*modifier <= '0' || *modifier > '9') &&
-	     *modifier != '*')
-	{
-		if (*modifier == '0')
-			(*index)++;
-		return (0);
-	}
-
-	while ((*modifier >= '0' && *modifier <= '9') ||
-	       (*modifier == '*'))
-	{
-		(*index)++;
-
-		if (*modifier == '*')
+		if (NEG_FLAG == 0) /* Handle width */
 		{
-			value = va_arg(args, int);
-			if (value <= 0)
-				return (0);
-			return (value);
+			pad = (ZERO_FLAG == 1) ? '0' : ' ';
+			for (; wid > 1; wid--)
+				ret += _memcpy(output, &pad, 1);
 		}
-
-		value *= 10;
-		value += (*modifier - '0');
-		modifier++;
+		if (((flags >> 5) & 1) == 1) /* Print 0x for ptr address */
+			ret += _memcpy(output, lead, 2);
 	}
 
-	return (value);
-}
+	digit = base[(num % size)];
+	_memcpy(output, &digit, 1);
 
-/**
- * handle_specifiers - Matches a conversion specifier with
- *                     a corresponding conversion function.
- * @specifier: A pointer to a potential conversion specifier.
- *
- * Return: If a conversion function is matched - a pointer to the function.
- *         Otherwise - NULL.
- */
-unsigned int (*handle_specifiers(const char *specifier))(va_list, buffer_t *,
-		unsigned char, int, int, unsigned char)
-{
-	int i;
-	converter_t converters[] = {
-		{'c', convert_c},
-		{'s', convert_s},
-		{'d', convert_di},
-		{'i', convert_di},
-		{'%', convert_percent},
-		{'b', convert_b},
-		{'u', convert_u},
-		{'o', convert_o},
-		{'x', convert_x},
-		{'X', convert_X},
-		{'S', convert_S},
-		{'p', convert_p},
-		{'r', convert_r},
-		{'R', convert_R},
-		{0, NULL}
-	};
-
-	for (i = 0; converters[i].func; i++)
-	{
-		if (converters[i].specifier == *specifier)
-			return (converters[i].func);
-	}
-
-	return (NULL);
+	return (ret);
 }
